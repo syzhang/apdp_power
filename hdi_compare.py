@@ -22,10 +22,9 @@ def comp_hdi_mean(model_name, param_ls, sort=True, draw_idx=50, draws=1000, seed
         # random compare n draws
         for comp in range(1,draws):
             # load MCMC traces with matching seeds (not number of subjects)
-            # hc_file = os.path.join(output_dir, 'hc_sim_'+str(int(np.random.randint(0,draw_idx,1)))+'.csv')
-            hc_file = os.path.join(output_dir, 'hc_sim_0.csv')
-            pt_file = os.path.join(output_dir, 'pt_sim_0.csv')
-            print(hc_file, pt_file)
+            hc_file = os.path.join(output_dir, 'hc_sim_'+str(int(np.random.randint(0,draw_idx,1)))+'.csv')
+            pt_file = os.path.join(output_dir, 'pt_sim_'+str(int(np.random.randint(0,draw_idx,1)))+'.csv')
+            # print(hc_file, pt_file)
 
             if os.path.isfile(hc_file) and os.path.isfile(pt_file):
                 hc_dict = pd.read_csv(hc_file)
@@ -33,7 +32,7 @@ def comp_hdi_mean(model_name, param_ls, sort=True, draw_idx=50, draws=1000, seed
 
                 # calculate lower bounds of simulation using difference
                 hdi_bounds = hdi_diff(key, hc_dict, pt_dict)
-                print(hdi_bounds)
+                # print(hdi_bounds)
                 # store hdi bounds
                 bounds.append(hdi_bounds)
                 # store mean
@@ -129,9 +128,48 @@ def plot_violin_params(csv_params, model_name, n_perm):
     save_name = 'param_mean.png'
     fig.savefig(save_dir+save_name,bbox_inches='tight',pad_inches=0)
 
+def plot_hdi_permutations(csv_params, model_name, n_perm):
+    """plot hdi for all permutations"""
+    import seaborn as sns
+    sns.set_theme(style="whitegrid")
+    df = pd.read_csv(csv_params)
+    param_ls = np.unique(df['param'])
+    for param in param_ls:
+        # fig, ax = plt.subplots(figsize=(5,4))
+        fig, ax = plt.subplots(figsize=(3,2.5))
+        df_tmp = df[(df['param']==param) & (df['group']=='control')]
+        df_tmp_sort = df_tmp.sort_values(by=['hdi_high'],ascending=True)
+        fill_indicator = sum(df_tmp_sort['hdi_high']>0)<sum(df_tmp_sort['hdi_high']<=0)
+        cnt = 0
+        fill_range = []
+        for _, row in df_tmp_sort.iterrows():
+            plt.vlines(x = cnt, ymin = row['hdi_low'], ymax = row['hdi_high'], colors = 'black', label = 'HDI', linewidth=0.5)
+            if fill_indicator: # <0 majority
+                if row['hdi_high']>=0:
+                    fill_range.append(cnt)
+            else:
+                if row['hdi_high']<0:
+                    fill_range.append(cnt)
+            cnt += 1
+        plt.fill_between(fill_range, min(df_tmp_sort['hdi_low']), max(df_tmp_sort['hdi_high']), facecolor='gray', alpha=0.5) 
+        plt.xlabel(param, fontsize=10)
+        plt.ylabel('Control>Patient 95% HDI', fontsize=10)
+        plt.yticks(fontsize=8)
+        plt.xticks(fontsize=8) 
+        # plt.suptitle(f'Control>Patient 95% HDI for parameter estimation \n ({model_name} task, each line represents 1 simulation)')
+        plt.title(f'Parameter 95% HDI ({model_name} task)', fontsize=10)
+        # save fig
+        save_dir = './figs/'+model_name+'/'
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
+        save_name = f'param_hdi_{param}.png'
+        fig.savefig(save_dir+save_name, bbox_inches='tight',pad_inches=0)
+
+
 if __name__ == "__main__":
     model_name = 'motorcircle'
     param_ls = ['loss_sens', 'perturb']
-    n_perm = 20
-    comp_hdi_mean(model_name, param_ls, sort=False, draw_idx=0, draws=n_perm, seed=0)
+    n_perm = 1000
+    comp_hdi_mean(model_name, param_ls, sort=False, draw_idx=20, draws=n_perm, seed=0)
     plot_violin_params(f'./figs/{model_name}/params.csv', model_name, n_perm=n_perm)
+    plot_hdi_permutations(f'./figs/{model_name}/params.csv', model_name, n_perm)
